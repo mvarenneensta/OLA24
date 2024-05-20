@@ -1,0 +1,19 @@
+Stochastic environment
+For bid distribution of other players we can use uniform distribution in [0,1]
+For user's demand curve we can use 1-price after price normalization
+
+
+We can use the PricingEnvironment in lab3 for pricing in stochastic environment with n_t = 1 constant
+Pricing algorithm GP-UCB
+
+Bidding environment we use SecondPriceAuction in lab4
+# simple scenario: competitors sample bids from a uniform 
+other_bids = np.random.uniform(0, 10*B/n_users, size = (n_advertisers, n_users))
+
+
+Budget pacing as the primal-dual algorithm ==> MultiplicativePacingAgent
+UCB-like algorithm for non-truthful auctions used for second price auctions
+
+What is meant for primaml-dual algorithm?
+Do all the users have the same demand curve (the one we have to learn with GP)?
+Can we use the UCB-like algorithm for non-trutful auctions for second price auctions?
