@@ -86,50 +86,65 @@ class UCBLikeAgent():
         self.budget -= c_t
         self.t += 1
 
-# Agent EXP3 with Primal-Dual adjustments
 class EXP3AgentPrimalDual:
-    def __init__(self, num_slots, num_prices, learning_rate):
-        self.num_slots = num_slots
-        self.num_prices = num_prices
+    def __init__(self, possible_bids, learning_rate, budget, eta, T):
+        self.possible_bids = possible_bids
+
         self.learning_rate = learning_rate
+        self.budget = budget
+        self.remaining_budget = self.budget
+        self.eta = eta
+        self.rho = self.budget/T
         
         # Initialize weights for both bids and prices
-        self.bid_weights = np.ones(num_slots)
-        self.price_weights = np.ones(num_prices)
+        self.bid_weights = np.ones(len(possible_bids))
         
         self.bid_probabilities = self.bid_weights / self.bid_weights.sum()
-        self.price_probabilities = self.price_weights / self.price_weights.sum()
+        
+        # Initialize lambda (pacing multiplier)
+        self.lmbd = 1.0
+        self.current_day = 0
+        self.T = T
+
+        self.last_prob = None
 
     def bid(self):
-        self.bid_probabilities = (1 - self.learning_rate) * (self.bid_weights / self.bid_weights.sum()) + \
-                                 (self.learning_rate / self.num_slots)
-        bid_slot = np.random.choice(self.num_slots, p=self.bid_probabilities)
-        return bid_slot
+        if self.current_day >= self.T:
+            return 0
+        
+        # Calculate remaining per-round budget
+        remaining_rounds = self.T - self.current_day
+        per_round_budget = self.remaining_budget / remaining_rounds
 
-    def choose_price(self):
-        self.price_probabilities = (1 - self.learning_rate) * (self.price_weights / self.price_weights.sum()) + \
-                                   (self.learning_rate / self.num_prices)
-        price_level = np.random.choice(self.num_prices, p=self.price_probabilities)
-        return price_level
+        # Add a small constant to prevent division by zero
+        epsilon = 1e-10
+        probs = (self.bid_weights + epsilon) / np.sum(self.bid_weights + epsilon)
+        
+        # Ensure probabilities sum to 1
+        probs /= np.sum(probs)
 
-    def update(self, f_t, c_t):
-        bid_slot = self.last_bid_slot  # Assume we store the last bid slot
-        price_level = self.last_price_level  # Assume we store the last price level
+        self.last_prob = probs
+        chosen_bid_index = np.random.choice(len(self.possible_bids), p=probs)
+        chosen_bid = self.possible_bids[chosen_bid_index]
+        
+        returned_bid = min(chosen_bid, per_round_budget)
 
-        # Update bid weights
-        estimated_loss = c_t / self.bid_probabilities[bid_slot]
-        self.bid_weights[bid_slot] *= np.exp(-self.learning_rate * estimated_loss / self.num_slots)
+        return returned_bid
 
-        # Update price weights
-        estimated_reward = f_t / self.price_probabilities[price_level]
-        self.price_weights[price_level] *= np.exp(self.learning_rate * estimated_reward / self.num_prices)
+    def update(self, utility, cost):
+        # Update weights
+        loss = self.lmbd * (cost - self.rho) - utility
+        estimated_loss = loss / (self.last_prob + 1e-10)  # Add small constant to avoid division by zero
+        
+        # Clip the estimated loss to prevent extreme values
+        clipped_loss = np.clip(estimated_loss, -10, 10)
+        
+        # Update weights using softmax to maintain numerical stability
+        self.bid_weights = np.exp(np.log(self.bid_weights) - self.eta * clipped_loss)
+        self.bid_weights /= np.sum(self.bid_weights)  
 
-        # Update probabilities
-        self.bid_probabilities = (1 - self.learning_rate) * (self.bid_weights / self.bid_weights.sum()) + \
-                                 (self.learning_rate / self.num_slots)
-        self.price_probabilities = (1 - self.learning_rate) * (self.price_weights / self.price_weights.sum()) + \
-                                   (self.learning_rate / self.num_prices)
+        # Update lambda
+        self.lmbd = max(0, self.lmbd + self.eta * (cost - self.rho))
 
-    def update_price(self, price_level, reward):
-        estimated_reward = reward / self.price_probabilities[price_level]
-        self.price_weights[price_level] *= np.exp(self.learning_rate * estimated_reward / self.num_prices)
+        self.remaining_budget -= cost
+        self.current_day += 1
