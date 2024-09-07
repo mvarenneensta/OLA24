@@ -85,3 +85,51 @@ class UCBLikeAgent():
         
         self.budget -= c_t
         self.t += 1
+
+# Agent EXP3 with Primal-Dual adjustments
+class EXP3AgentPrimalDual:
+    def __init__(self, num_slots, num_prices, learning_rate):
+        self.num_slots = num_slots
+        self.num_prices = num_prices
+        self.learning_rate = learning_rate
+        
+        # Initialize weights for both bids and prices
+        self.bid_weights = np.ones(num_slots)
+        self.price_weights = np.ones(num_prices)
+        
+        self.bid_probabilities = self.bid_weights / self.bid_weights.sum()
+        self.price_probabilities = self.price_weights / self.price_weights.sum()
+
+    def bid(self):
+        self.bid_probabilities = (1 - self.learning_rate) * (self.bid_weights / self.bid_weights.sum()) + \
+                                 (self.learning_rate / self.num_slots)
+        bid_slot = np.random.choice(self.num_slots, p=self.bid_probabilities)
+        return bid_slot
+
+    def choose_price(self):
+        self.price_probabilities = (1 - self.learning_rate) * (self.price_weights / self.price_weights.sum()) + \
+                                   (self.learning_rate / self.num_prices)
+        price_level = np.random.choice(self.num_prices, p=self.price_probabilities)
+        return price_level
+
+    def update(self, f_t, c_t):
+        bid_slot = self.last_bid_slot  # Assume we store the last bid slot
+        price_level = self.last_price_level  # Assume we store the last price level
+
+        # Update bid weights
+        estimated_loss = c_t / self.bid_probabilities[bid_slot]
+        self.bid_weights[bid_slot] *= np.exp(-self.learning_rate * estimated_loss / self.num_slots)
+
+        # Update price weights
+        estimated_reward = f_t / self.price_probabilities[price_level]
+        self.price_weights[price_level] *= np.exp(self.learning_rate * estimated_reward / self.num_prices)
+
+        # Update probabilities
+        self.bid_probabilities = (1 - self.learning_rate) * (self.bid_weights / self.bid_weights.sum()) + \
+                                 (self.learning_rate / self.num_slots)
+        self.price_probabilities = (1 - self.learning_rate) * (self.price_weights / self.price_weights.sum()) + \
+                                   (self.learning_rate / self.num_prices)
+
+    def update_price(self, price_level, reward):
+        estimated_reward = reward / self.price_probabilities[price_level]
+        self.price_weights[price_level] *= np.exp(self.learning_rate * estimated_reward / self.num_prices)
